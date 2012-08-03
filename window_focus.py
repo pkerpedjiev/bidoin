@@ -72,8 +72,6 @@ def get_active_window_title():
 by_class_title=defaultdict(float)
 by_class=defaultdict(float)
 by_title=defaultdict(float)
-productive=0.
-unproductive=0.
 
 def is_productive(program_class):
     '''
@@ -94,94 +92,106 @@ except IOError as e:
 
 ct_file.seek(0, 2)
 
-prev_class_and_title = ('','')
-prev_start_time = time()
-prev_time = time()
-prev_idle_time = time()
-
-prev_tell = ct_file.tell()
-total_time = 0.
-start_time = time()
 
 
+class TimeTracker:
+    def __init__(self):
+        self.productive = 0
+        self.unproductive = 0
+        self.prev_class_and_title = ('','')
+        self.prev_idle_time = time()
+        self.prev_tell = ct_file.tell()
+        self.prev_start_time = time()
+        self.prev_time = time()
+        self.start_time = time()
 
-while(True):
-    class_and_title = get_active_window_title()
+    def add_increment(self, class_and_title, prev_time, time_incr, idle):
+        if not idle and class_and_title != ('',''):
+            if self.prev_class_and_title == class_and_title:
+                ct_file.seek(self.prev_tell)
+                ct_file.write("%f %f %s\n" % ( self.prev_start_time, time(), " ".join(class_and_title)))
+            else:
+                self.prev_start_time = prev_time
+                self.prev_class_and_title = class_and_title
+                self.prev_tell = ct_file.tell()
+                ct_file.write("%f %f %s\n" % ( self.prev_start_time, time(), " ".join(class_and_title)))
+                ct_file.flush()
 
-    time_incr = time() - prev_time
-    total_time += time_incr
+            by_class_title[class_and_title] += time_incr
+            by_title[class_and_title[1]] += time_incr
+            by_class[class_and_title[0]] += time_incr
 
-    xss.XScreenSaverQueryInfo( dpy, root, xss_info)
-    #print "Idle time in milliseconds: %d" % ( xss_info.contents.idle, )
-    idle = False
-
-
-    if xss_info.contents.idle > (3. * 60. * 1000.):
-        idle = True
-        class_and_title=('','')
-        prev_class_and_title=('','')
-
-    if not idle and class_and_title != ('',''):
-        if prev_class_and_title == class_and_title:
-            ct_file.seek(prev_tell)
-            ct_file.write("%f %f %s\n" % ( prev_start_time, time(), " ".join(class_and_title)))
+            if is_productive(class_and_title[0]):
+                self.productive += time_incr
+            else:
+                self.unproductive += time_incr
         else:
-            prev_start_time = prev_time
-            prev_class_and_title = class_and_title
-            prev_tell = ct_file.tell()
-            ct_file.write("%f %f %s\n" % ( prev_start_time, time(), " ".join(class_and_title)))
-            ct_file.flush()
+            self.prev_idle_time = time()
 
-        by_class_title[class_and_title] += time_incr
-        by_title[class_and_title[1]] += time_incr
-        by_class[class_and_title[0]] += time_incr
+        #most = sorted(by_class_title.iteritems(), key=operator.itemgetter(1), reverse=True)
+        most = sorted(by_class.iteritems(), key=operator.itemgetter(1), reverse=True)
+        most1 = sorted(by_class_title.iteritems(), key=operator.itemgetter(1), reverse=True)
 
-        if is_productive(class_and_title[0]):
-            productive += time_incr
+        print chr(27) + "[2J" + chr(27) + "[;H"
+
+        '''
+        print "xss_info.window:", xss_info.contents.window
+        print "xss_info.state:", xss_info.contents.state
+        print "xss_info.kind:", xss_info.contents.kind
+        print "xss_info.since:", xss_info.contents.since
+        print "xss_info.idle:", xss_info.contents.idle
+        '''
+
+        if self.productive > self.unproductive:
+            print "%.3f %s %s" % ( self.productive / self.total_time, strftime("%H:%M:%S", localtime(self.productive + timezone)) , "productive")
+            print "%.3f %s %s" % ( self.unproductive / self.total_time, strftime("%H:%M:%S", localtime(self.unproductive + timezone)) , "unproductive")
         else:
-            unproductive += time_incr
-    else:
-        prev_idle_time = time()
+            print "%.3f %s %s" % ( self.unproductive / self.total_time, strftime("%H:%M:%S", localtime(self.unproductive + timezone)) , "unproductive")
+            print "%.3f %s %s" % ( self.productive / self.total_time, strftime("%H:%M:%S", localtime(self.productive + timezone)) , "productive")
 
-    #most = sorted(by_class_title.iteritems(), key=operator.itemgetter(1), reverse=True)
-    most = sorted(by_class.iteritems(), key=operator.itemgetter(1), reverse=True)
-    most1 = sorted(by_class_title.iteritems(), key=operator.itemgetter(1), reverse=True)
+        print
+        print '---------------------------------------------------------'
 
-    print chr(27) + "[2J" + chr(27) + "[;H"
+        for i in xrange(min(20, len(most))):
+            #print "%.3f %6.1f %s" % ( most[i][1] / self.total_time, most[i][1] , most[i][0])
+            print "%.3f %s %s" % ( most[i][1] / self.total_time, strftime("%H:%M:%S", localtime(most[i][1] + timezone)) , most[i][0])
 
-    '''
-    print "xss_info.window:", xss_info.contents.window
-    print "xss_info.state:", xss_info.contents.state
-    print "xss_info.kind:", xss_info.contents.kind
-    print "xss_info.since:", xss_info.contents.since
-    print "xss_info.idle:", xss_info.contents.idle
-    '''
+        print
+        print
+        print "Idle time: %s Active time: %s Total time: %s is_idle: %s" % ( strftime("%H:%M:%S", localtime(xss_info.contents.idle / 1000. + timezone)), strftime("%H:%M:%S", localtime(time() - self.prev_idle_time + timezone)), strftime("%H:%M:%S", localtime(time() - self.start_time + timezone)),  idle )
+        print '---------------------------------------------------------'
 
-    if productive > unproductive:
-        print "%.3f %s %s" % ( productive / total_time, strftime("%H:%M:%S", localtime(productive + timezone)) , "productive")
-        print "%.3f %s %s" % ( unproductive / total_time, strftime("%H:%M:%S", localtime(unproductive + timezone)) , "unproductive")
-    else:
-        print "%.3f %s %s" % ( unproductive / total_time, strftime("%H:%M:%S", localtime(unproductive + timezone)) , "unproductive")
-        print "%.3f %s %s" % ( productive / total_time, strftime("%H:%M:%S", localtime(productive + timezone)) , "productive")
-
-    print
-    print '---------------------------------------------------------'
-
-    for i in xrange(min(20, len(most))):
-        #print "%.3f %6.1f %s" % ( most[i][1] / total_time, most[i][1] , most[i][0])
-        print "%.3f %s %s" % ( most[i][1] / total_time, strftime("%H:%M:%S", localtime(most[i][1] + timezone)) , most[i][0])
-
-    print
-    print
-    print "Idle time: %s Active time: %s Total time: %s is_idle: %s" % ( strftime("%H:%M:%S", localtime(xss_info.contents.idle / 1000. + timezone)), strftime("%H:%M:%S", localtime(time() - prev_idle_time + timezone)), strftime("%H:%M:%S", localtime(time() - start_time + timezone)),  idle )
-    print '---------------------------------------------------------'
-
-    for i in xrange(min(20, len(most1))):
-        #print "%.3f %6.1f %s" % ( most[i][1] / total_time, most[i][1] , most[i][0])
-        print "%.3f %s %s" % ( most1[i][1] / total_time, strftime("%H:%M:%S", localtime(most1[i][1] + timezone)) , most1[i][0])
+        for i in xrange(min(20, len(most1))):
+            #print "%.3f %6.1f %s" % ( most[i][1] / self.total_time, most[i][1] , most[i][0])
+            print "%.3f %s %s" % ( most1[i][1] / self.total_time, strftime("%H:%M:%S", localtime(most1[i][1] + timezone)) , most1[i][0])
 
 
-    prev_time = time()
+        self.prev_time = time()
 
-    sys.stdout.flush()
-    sleep(1.)
+        sys.stdout.flush()
+
+    def run(self):
+        self.total_time = 0
+        while(True):
+            class_and_title = get_active_window_title()
+
+            time_incr = time() - self.prev_time
+            self.total_time += time_incr
+
+            xss.XScreenSaverQueryInfo( dpy, root, xss_info)
+            #print "Idle time in milliseconds: %d" % ( xss_info.contents.idle, )
+            idle = False
+
+
+            if xss_info.contents.idle > (3. * 60. * 1000.):
+                idle = True
+                class_and_title=('','')
+                self.prev_class_and_title=('','')
+
+            tt.add_increment(class_and_title, self.prev_time, time_incr, idle)
+
+            sleep(1.)
+
+
+tt = TimeTracker()
+tt.run()
