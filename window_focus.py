@@ -7,8 +7,10 @@ from subprocess import Popen, PIPE
 from time import sleep, time, strftime, localtime, timezone
 from random import uniform
 from collections import defaultdict
+from datetime import date
 
 import re, operator, sys
+import shlex
 
 import ctypes
 import os
@@ -27,7 +29,6 @@ dpy = xlib.XOpenDisplay( os.environ['DISPLAY'])
 root = xlib.XDefaultRootWindow( dpy)
 xss = ctypes.cdll.LoadLibrary( 'libXss.so')
 xss.XScreenSaverAllocInfo.restype = ctypes.POINTER(XScreenSaverInfo)
-xss_info = xss.XScreenSaverAllocInfo()
 
 
 def get_active_window_title():
@@ -73,24 +74,30 @@ by_class_title=defaultdict(float)
 by_class=defaultdict(float)
 by_title=defaultdict(float)
 
-def is_productive(program_class):
+def is_productive(program_class, program_name):
     '''
     Check if this program is in the list of productive programs.
     '''
-    productive = ['terminal', 'texmaker', 'freemind', 'evince', 'inkscape']
+    productive_class = ['terminal', 'texmaker', 'freemind', 'evince', 'inkscape', 'tk', 'thunar', 'gedit', 'thunderbird', 'eog', 'PyMOL']
+    productive_name = ['Stack Overflow', 'matplotlib','Matplotlib', 'oxfordjournals', 'Python', 'NumPy', 'git', 'Git', 'OpenCL', 'PyMOL', 'Adobe Reader', 'Bio.', 'bio.', 'pylint', 'SciPy', 'scipy', 'genome', 'latex', 'LaTeX', 'pymol', 'autoconf', 'patch', 'fastq']
 
-    for p in productive:
-        if program_class.find(p) >= 0:
+    #unproductive_name = ['window_focus']
+    unproductive_name = []
+
+    for p in unproductive_name:
+        if program_name.lower().find(p.lower()) >= 0:
+            return False
+
+    for p in productive_class:
+        if program_class.lower().find(p.lower()) >= 0:
+            return True
+
+    for p in productive_name:
+        if program_name.lower().find(p.lower()) >= 0:
             return True
 
     return False
 
-try:
-    ct_file = open('saved/been_run.csv', 'r+')
-except IOError as e:
-    ct_file = open('saved/been_run.csv', 'w+')
-
-ct_file.seek(0, 2)
 
 
 
@@ -100,28 +107,41 @@ class TimeTracker:
         self.unproductive = 0
         self.prev_class_and_title = ('','')
         self.prev_idle_time = time()
-        self.prev_tell = ct_file.tell()
         self.prev_start_time = time()
         self.prev_time = time()
         self.start_time = time()
+        self.total_time = 0.
+        self.xss_info = xss.XScreenSaverAllocInfo()
 
-    def add_increment(self, class_and_title, prev_time, time_incr, idle):
+        try:
+            self.ct_file = open('saved/been_run.csv', 'r+')
+        except IOError as e:
+            self.ct_file = open('saved/been_run.csv', 'w+')
+
+
+    def add_increment(self, class_and_title, prev_time, time_incr, idle, write=False):
         if not idle and class_and_title != ('',''):
-            if self.prev_class_and_title == class_and_title:
-                ct_file.seek(self.prev_tell)
-                ct_file.write("%f %f %s\n" % ( self.prev_start_time, time(), " ".join(class_and_title)))
-            else:
-                self.prev_start_time = prev_time
-                self.prev_class_and_title = class_and_title
-                self.prev_tell = ct_file.tell()
-                ct_file.write("%f %f %s\n" % ( self.prev_start_time, time(), " ".join(class_and_title)))
-                ct_file.flush()
+            self.total_time += time_incr
+
+            if write:
+                # we don't want to save entries that have been read before
+                if self.prev_class_and_title == class_and_title:
+                    self.ct_file.seek(self.prev_tell)
+                    self.ct_file.write("%f %f %s\n" % ( self.prev_start_time, time(), " ".join(class_and_title)))
+                else:
+                    self.prev_start_time = prev_time
+                    self.prev_class_and_title = class_and_title
+                    self.prev_tell = self.ct_file.tell()
+                    self.ct_file.write("%f %f %s\n" % ( self.prev_start_time, time(), " ".join(class_and_title)))
+                    self.ct_file.flush()
+
+            class_and_title = (class_and_title[0].strip('"'), class_and_title[1].strip('"'))
 
             by_class_title[class_and_title] += time_incr
             by_title[class_and_title[1]] += time_incr
             by_class[class_and_title[0]] += time_incr
 
-            if is_productive(class_and_title[0]):
+            if is_productive(class_and_title[0], class_and_title[1]):
                 self.productive += time_incr
             else:
                 self.unproductive += time_incr
@@ -150,6 +170,17 @@ class TimeTracker:
             print "%.3f %s %s" % ( self.productive / self.total_time, strftime("%H:%M:%S", localtime(self.productive + timezone)) , "productive")
 
         print
+
+        '''
+
+        if self.unproductive < 0.25 * self.total_time:
+            print "Free time: %s" % ( strftime("%H:%M:%S", localtime(0.25 * self.total_time - self.unproductive + timezone)))
+        '''
+        if self.unproductive < (1/3.) * self.productive:
+            print "Free time: %s" % ( strftime("%H:%M:%S", localtime((1/3.) * self.productive - self.unproductive + timezone)))
+        else:
+            print "Free time: 00:00:00 Time to make up: %s" % ( strftime("%H:%M:%S", localtime((self.unproductive * 3.) - self.productive + timezone)))
+
         print '---------------------------------------------------------'
 
         for i in xrange(min(20, len(most))):
@@ -158,7 +189,7 @@ class TimeTracker:
 
         print
         print
-        print "Idle time: %s Active time: %s Total time: %s is_idle: %s" % ( strftime("%H:%M:%S", localtime(xss_info.contents.idle / 1000. + timezone)), strftime("%H:%M:%S", localtime(time() - self.prev_idle_time + timezone)), strftime("%H:%M:%S", localtime(time() - self.start_time + timezone)),  idle )
+        print "Active time: %s Total active time: %s Total time: %s is_idle: %s" % ( strftime("%H:%M:%S", localtime(time() - self.prev_idle_time + timezone)), strftime("%H:%M:%S", localtime(self.total_time + timezone)), strftime("%H:%M:%S", localtime(time() - self.start_time + timezone)),  idle )
         print '---------------------------------------------------------'
 
         for i in xrange(min(20, len(most1))):
@@ -171,27 +202,63 @@ class TimeTracker:
         sys.stdout.flush()
 
     def run(self):
-        self.total_time = 0
+        self.ct_file.seek(0, 2)
+        self.prev_tell = self.ct_file.tell()
+
         while(True):
             class_and_title = get_active_window_title()
 
             time_incr = time() - self.prev_time
-            self.total_time += time_incr
 
-            xss.XScreenSaverQueryInfo( dpy, root, xss_info)
+            xss.XScreenSaverQueryInfo( dpy, root, self.xss_info)
             #print "Idle time in milliseconds: %d" % ( xss_info.contents.idle, )
             idle = False
 
 
-            if xss_info.contents.idle > (3. * 60. * 1000.):
+            if self.xss_info.contents.idle > (2. * 60. * 1000.):
                 idle = True
                 class_and_title=('','')
                 self.prev_class_and_title=('','')
 
-            tt.add_increment(class_and_title, self.prev_time, time_incr, idle)
+            self.add_increment(class_and_title, self.prev_time, time_incr, idle, write=True)
 
             sleep(1.)
 
+    def is_today(self, t):
+        '''
+        Is a particular time t, today?
+        '''
+        today = date.today()
+        lt = localtime(t + timezone)
+
+        if lt.tm_mday == today.day and lt.tm_mon == today.month and lt.tm_year == today.year:
+            return True
+
+        return False
+
+    def load_previous_data(self, today=True):
+        self.ct_file.seek(0)
+
+        lines = self.ct_file.readlines()
+        for line in reversed(lines):
+            parts = shlex.split(line)
+
+            prev_time = float(parts[0])
+            time_incr = float(parts[1]) - prev_time
+
+            if not self.is_today(prev_time):
+                continue
+
+            if len(parts) == 3:
+                class_and_title = (parts[2], '')
+            elif len(parts) == 2:
+                class_and_title = ('', '')
+            else:
+                class_and_title = (parts[2], parts[3])
+
+            self.add_increment(class_and_title, prev_time, time_incr, False, write=False)
+            self.start_time = prev_time
 
 tt = TimeTracker()
+tt.load_previous_data()
 tt.run()
