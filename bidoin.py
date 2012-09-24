@@ -100,9 +100,9 @@ class TimeTracker:
         self.xss_info = xss.XScreenSaverAllocInfo()
 
         try:
-            self.ct_file = open('saved/been_run.csv', 'r+')
+            self.ct_file = open('beenrun.csv', 'r+')
         except IOError as e:
-            self.ct_file = open('saved/been_run.csv', 'w+')
+            self.ct_file = open('beenrun.csv', 'w+')
 
 
     def add_increment(self, class_and_title, prev_time, time_incr, idle, write=False):
