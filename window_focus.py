@@ -8,6 +8,7 @@ from time import sleep, time, strftime, localtime, timezone
 from random import uniform
 from collections import defaultdict
 from datetime import date
+from productive import is_productive
 
 import re, operator, sys
 import shlex
@@ -74,31 +75,16 @@ by_class_title=defaultdict(float)
 by_class=defaultdict(float)
 by_title=defaultdict(float)
 
-def is_productive(program_class, program_name):
-    '''
-    Check if this program is in the list of productive programs.
-    '''
-    productive_class = ['terminal', 'texmaker', 'freemind', 'evince', 'inkscape', 'tk', 'thunar', 'gedit', 'thunderbird', 'eog', 'PyMOL']
-    productive_name = ['Stack Overflow', 'matplotlib','Matplotlib', 'oxfordjournals', 'Python', 'NumPy', 'git', 'Git', 'OpenCL', 'PyMOL', 'Adobe Reader', 'Bio.', 'bio.', 'pylint', 'SciPy', 'scipy', 'genome', 'latex', 'LaTeX', 'pymol', 'autoconf', 'patch', 'fastq']
 
-    #unproductive_name = ['window_focus']
-    unproductive_name = []
+def is_ignored(program_class, program_name):
+    #ignored_name = ['Duolingo']
+    ignored_name = []
 
-    for p in unproductive_name:
-        if program_name.lower().find(p.lower()) >= 0:
-            return False
-
-    for p in productive_class:
-        if program_class.lower().find(p.lower()) >= 0:
-            return True
-
-    for p in productive_name:
-        if program_name.lower().find(p.lower()) >= 0:
+    for n in ignored_name:
+        if program_name.lower().find(n.lower()) >= 0:
             return True
 
     return False
-
-
 
 
 class TimeTracker:
@@ -141,10 +127,11 @@ class TimeTracker:
             by_title[class_and_title[1]] += time_incr
             by_class[class_and_title[0]] += time_incr
 
-            if is_productive(class_and_title[0], class_and_title[1]):
-                self.productive += time_incr
-            else:
-                self.unproductive += time_incr
+            if not is_ignored(class_and_title[0], class_and_title[1]):
+                if is_productive(class_and_title[0], class_and_title[1]):
+                    self.productive += time_incr
+                else:
+                    self.unproductive += time_incr
         else:
             self.prev_idle_time = time()
 
@@ -163,8 +150,8 @@ class TimeTracker:
         '''
 
         if self.productive > self.unproductive:
-            print "%.3f %s %s" % ( self.productive / self.total_time, strftime("%H:%M:%S", localtime(self.productive + timezone)) , "productive")
-            print "%.3f %s %s" % ( self.unproductive / self.total_time, strftime("%H:%M:%S", localtime(self.unproductive + timezone)) , "unproductive")
+            print "%.3f %s %s" % ( self.productive / (self.productive + self.unproductive), strftime("%H:%M:%S", localtime(self.productive + timezone)) , "productive")
+            print "%.3f %s %s" % ( self.unproductive / (self.productive + self.unproductive), strftime("%H:%M:%S", localtime(self.unproductive + timezone)) , "unproductive")
         else:
             print "%.3f %s %s" % ( self.unproductive / self.total_time, strftime("%H:%M:%S", localtime(self.unproductive + timezone)) , "unproductive")
             print "%.3f %s %s" % ( self.productive / self.total_time, strftime("%H:%M:%S", localtime(self.productive + timezone)) , "productive")
@@ -183,7 +170,7 @@ class TimeTracker:
 
         print '---------------------------------------------------------'
 
-        for i in xrange(min(20, len(most))):
+        for i in xrange(min(10, len(most))):
             #print "%.3f %6.1f %s" % ( most[i][1] / self.total_time, most[i][1] , most[i][0])
             print "%.3f %s %s" % ( most[i][1] / self.total_time, strftime("%H:%M:%S", localtime(most[i][1] + timezone)) , most[i][0])
 
@@ -192,7 +179,7 @@ class TimeTracker:
         print "Active time: %s Total active time: %s Total time: %s is_idle: %s" % ( strftime("%H:%M:%S", localtime(time() - self.prev_idle_time + timezone)), strftime("%H:%M:%S", localtime(self.total_time + timezone)), strftime("%H:%M:%S", localtime(time() - self.start_time + timezone)),  idle )
         print '---------------------------------------------------------'
 
-        for i in xrange(min(20, len(most1))):
+        for i in xrange(min(10, len(most1))):
             #print "%.3f %6.1f %s" % ( most[i][1] / self.total_time, most[i][1] , most[i][0])
             print "%.3f %s %s" % ( most1[i][1] / self.total_time, strftime("%H:%M:%S", localtime(most1[i][1] + timezone)) , most1[i][0])
 
@@ -241,7 +228,10 @@ class TimeTracker:
 
         lines = self.ct_file.readlines()
         for line in reversed(lines):
-            parts = shlex.split(line)
+            try: 
+                parts = shlex.split(line)
+            except ValueError:
+                continue
 
             prev_time = float(parts[0])
             time_incr = float(parts[1]) - prev_time
