@@ -89,12 +89,41 @@ class MinuteHistogram:
         ax.legend(handles, labels)
         plt.show()
 
+class DayOfWeekHistogram():
+    def __init__(self):
+        self.productive = defaultdict(int)
+        self.unproductive = defaultdict(int)
+
+    def add_data(self, prev_time, next_time, class_and_title):
+        lt = time.localtime(prev_time + time.timezone)
+
+        if is_productive(class_and_title[0], class_and_title[1]):
+            self.productive[lt.tm_wday] += next_time - prev_time
+        else:
+            self.unproductive[lt.tm_wday] += next_time - prev_time
+
+    def plot(self):
+        #print "self.productive:", self.productive
+        (days_prod, productive) = zip(*self.productive.items())
+        (days_unprod, unproductive) = zip(*self.unproductive.items())
+        ax = plt.subplot(1,1,1)
+
+        width=0.3
+
+        ax.bar(np.array(days_prod) + width/2. , productive, width=width/2., color='green')
+        ax.bar(np.array(days_unprod) + width, unproductive, width=width/2., color='red')
+
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(handles, labels)
+        plt.show()
+
 def main():
     parser = OptionParser()
 
     #parser.add_option('-o', '--options', dest='some_option', default='yo', help="Place holder for a real option", type='str')
     parser.add_option('-l', '--lines', dest='lines', default=10000000, help="The number of lines to read from the data file.", type=int)
-    parser.add_option('-p', '--plot', dest='plot', default=False, help="Plot the productive and unproductive times spent.", action='store_true')
+    parser.add_option('-m', '--plot-minute', dest='plot_minute', default=False, help="Plot the productive and unproductive times spent each minute.", action='store_true')
+    parser.add_option('-d', '--plot-day-of-week', dest='plot_day_of_week', default=False, help="Plot the productive and unproductive times spent each day of the week.", action='store_true')
 
     (options, args) = parser.parse_args()
     
@@ -103,6 +132,7 @@ def main():
 
     sbd = SumByDay()
     mh = MinuteHistogram()
+    dwh = DayOfWeekHistogram()
     lines = data_file.readlines()
 
     for line in reversed(lines):
@@ -128,11 +158,17 @@ def main():
 
         sbd.add_data(prev_time, next_time, class_and_title)
 
-        if options.plot:
+        if options.plot_minute:
             mh.add_data(prev_time, next_time, class_and_title)
+        if options.plot_day_of_week:
+            dwh.add_data(prev_time, next_time, class_and_title)
 
-    mh.plot()
-    sbd.summarize()
+    if options.plot_minute:
+        mh.plot()
+    elif options.plot_day_of_week:
+        dwh.plot()
+    else:
+        sbd.summarize()
 
 if __name__ == '__main__':
     main()
