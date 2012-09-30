@@ -8,6 +8,7 @@ import time
 import shlex
 import matplotlib.pyplot as plt
 import numpy as np
+import datetime as dt
 
 def format_time(t):
     #print "t:", t
@@ -66,6 +67,14 @@ class MinuteHistogram:
 
     def add_data(self, prev_time, next_time, class_and_title):
         # Make a proverbial tick for every minute
+
+        # Take care of the interval before the second
+        lt = time.localtime(prev_time + time.timezone)
+        if is_productive(class_and_title[0], class_and_title[1]):
+            self.productive[lt.tm_hour * 60 + lt.tm_min] -= prev_time - int(prev_time)
+        else:
+            self.unproductive[lt.tm_hour * 60 + lt.tm_min] += prev_time - int(prev_time)
+
         for i in range(int(prev_time), int(next_time), 1):
             lt = time.localtime(i + time.timezone)
 
@@ -74,12 +83,18 @@ class MinuteHistogram:
             else:
                 self.unproductive[lt.tm_hour * 60 + lt.tm_min] += 1
 
+        lt = time.localtime(int(next_time) + time.timezone)
+        if is_productive(class_and_title[0], class_and_title[1]):
+            self.productive[lt.tm_hour * 60 + lt.tm_min] += next_time - int(next_time)
+        else:
+            self.unproductive[lt.tm_hour * 60 + lt.tm_min] += next_time - int(next_time)
+
     def plot(self):
         #print "self.productive:", self.productive
         (minutes_prod, productive) = zip(*self.productive.items())
         (minutes_unprod, unproductive) = zip(*self.unproductive.items())
-        print "minutes:", minutes_prod
-        print "productive:", productive
+        #print "minutes:", minutes_prod
+        #print "productive:", productive
         ax = plt.subplot(1,1,1)
 
         ax.plot(np.array(minutes_prod) / 60., productive, 'go')
@@ -123,7 +138,9 @@ def main():
     #parser.add_option('-o', '--options', dest='some_option', default='yo', help="Place holder for a real option", type='str')
     parser.add_option('-l', '--lines', dest='lines', default=10000000, help="The number of lines to read from the data file.", type=int)
     parser.add_option('-m', '--plot-minute', dest='plot_minute', default=False, help="Plot the productive and unproductive times spent each minute.", action='store_true')
-    parser.add_option('-d', '--plot-day-of-week', dest='plot_day_of_week', default=False, help="Plot the productive and unproductive times spent each day of the week.", action='store_true')
+    parser.add_option('-w', '--plot-day-of-week', dest='plot_day_of_week', default=False, help="Plot the productive and unproductive times spent each day of the week.", action='store_true')
+    parser.add_option('-d', '--days', dest='days', default=-1, help="Show the data for the past n days", type=int)
+    parser.add_option('-u', '--unproductive', dest='show_unproductive', default=False, help="List the unproductive entries.", action='store_true')
 
     (options, args) = parser.parse_args()
     
@@ -138,7 +155,6 @@ def main():
     for line in reversed(lines):
         if counter >= options.lines:
             break
-
         counter += 1
 
         try:
@@ -156,12 +172,27 @@ def main():
         else:
             class_and_title = (parts[2], parts[3])
 
+        if options.days >= 0:
+            lt = dt.date.fromtimestamp(prev_time)
+            nt = dt.date.fromtimestamp(time.time())
+
+            delta = nt - lt
+
+            if delta.days > options.days-1:
+                break
+
         sbd.add_data(prev_time, next_time, class_and_title)
 
         if options.plot_minute:
             mh.add_data(prev_time, next_time, class_and_title)
         if options.plot_day_of_week:
             dwh.add_data(prev_time, next_time, class_and_title)
+
+        if is_productive(class_and_title[0], class_and_title[1]):
+            pass
+        else:
+            if options.show_unproductive:
+                print class_and_title[0], class_and_title[1]
 
     if options.plot_minute:
         mh.plot()
