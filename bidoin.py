@@ -162,11 +162,12 @@ class TimeTracker:
 
         if self.unproductive < 0.25 * self.total_time:
             print "Free time: %s" % ( strftime("%H:%M:%S", localtime(0.25 * self.total_time - self.unproductive + timezone)))
-        '''
         if self.unproductive < (1/3.) * self.productive:
             print "Free time: %s" % ( strftime("%H:%M:%S", localtime((1/3.) * self.productive - self.unproductive + timezone)))
         else:
             print "Free time: 00:00:00 Time to make up: %s" % ( strftime("%H:%M:%S", localtime((self.unproductive * 3.) - self.productive + timezone)))
+        '''
+        print "Ratio (productive / unproductive): %.3f" % (self.productive / (self.unproductive + 0.1))
 
         print '---------------------------------------------------------'
 
@@ -176,12 +177,17 @@ class TimeTracker:
 
         print
         print
-        print "Active time: %s Total active time: %s Total time: %s is_idle: %s" % ( strftime("%H:%M:%S", localtime(time() - self.prev_idle_time + timezone)), strftime("%H:%M:%S", localtime(self.total_time + timezone)), strftime("%H:%M:%S", localtime(time() - self.start_time + timezone)),  idle )
+        print "Active time: %s Total active time: %s Total time: %s Start time: %s" % ( strftime("%H:%M:%S", localtime(time() - self.prev_idle_time + timezone)), strftime("%H:%M:%S", localtime(self.total_time + timezone)), strftime("%H:%M:%S", localtime(time() - self.start_time + timezone)),  strftime("%H:%M:%S", localtime(self.start_time)) )
         print '---------------------------------------------------------'
 
-        for i in xrange(min(10, len(most1))):
+        for i in xrange(min(20, len(most1))):
             #print "%.3f %6.1f %s" % ( most[i][1] / self.total_time, most[i][1] , most[i][0])
-            print "%.3f %s %s" % ( most1[i][1] / self.total_time, strftime("%H:%M:%S", localtime(most1[i][1] + timezone)) , most1[i][0])
+            if is_productive(most1[i][0][0], most1[i][0][1]):
+                prod_str = 'P'
+            else:
+                prod_str = 'U'
+
+            print "%.3f %s %s %s" % ( most1[i][1] / self.total_time, prod_str, strftime("%H:%M:%S", localtime(most1[i][1] + timezone)) , most1[i][0])
 
 
         self.prev_time = time()
