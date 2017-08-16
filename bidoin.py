@@ -239,8 +239,11 @@ class TimeTracker:
             except ValueError:
                 continue
 
-            prev_time = float(parts[0])
-            time_incr = float(parts[1]) - prev_time
+            try:
+                prev_time = float(parts[0])
+                time_incr = float(parts[1]) - prev_time
+            except ValueError:
+                print >>sys.stderr, "ValueError, line:", line
 
             if not self.is_today(prev_time):
                 continue
